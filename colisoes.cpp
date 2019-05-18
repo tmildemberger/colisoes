@@ -290,14 +290,6 @@ SDL_Texture* SDLtextureegg::getTexture() const {
 //         y += vy;
 //     }
 // };
-class PhysicsObj {
-public:
-    glm::dvec2 pos;
-    glm::dvec2 vel;
-    double mass;
-private:
-
-};
 
 class Ball {
 public:
@@ -312,39 +304,6 @@ public:
     void render(const SDLrendererninja& renderer, const SDLtextureegg& tex) {
         renderer.copy(tex, { static_cast<int>(pos.x - r), static_cast<int>(pos.y - r), static_cast<int>(2 * r), static_cast<int>(2 * r) });
     }
-
-    void update() {
-        pos += vel;
-    }
-};
-
-class PhysicsMan {
-public:
-    PhysicsMan(int w, int h, double cr)
-        : width (w), height (h), coef (cr) {
-        
-    }
-    void update(Ball& ball) {
-        ball.pos += ball.vel;
-        if (ball.pos.x + ball.r > width) {
-            ball.vel.x = -ball.vel.x;
-            ball.pos.x = width - ball.r;
-        } else if (ball.pos.x < ball.r) {
-            ball.vel.x = -ball.vel.x;
-            ball.pos.x = ball.r;
-        }
-        if (ball.pos.y + ball.r > height) {
-            ball.vel.y = -ball.vel.y;
-            ball.pos.y = height - ball.r;
-        } else if (ball.pos.y < ball.r) {
-            ball.vel.y = -ball.vel.y;
-            ball.pos.y = ball.r;
-        }
-    }
-private:
-    double width;
-    double height;
-    double coef;
 };
 
 #include <cstdlib>
@@ -367,9 +326,6 @@ public:
     T& operator*() {
         return transformed;
     }
-    void update() {
-        val_ = inv_(transformed);
-    }
 private:
     T& val_;
     T transformed;
@@ -377,12 +333,71 @@ private:
     transform inv_;
 };
 
-glm::dvec2 rotate(const glm::dvec2& vec, double ang);
-glm::dvec2 rotate(const glm::dvec2& vec, double ang) {
+glm::dvec2 rotate2D(const glm::dvec2& vec, double ang);
+glm::dvec2 rotate2D(const glm::dvec2& vec, double ang) {
     glm::dmat2 rotation_matrix { {std::cos(ang), -std::sin(ang)},
                                  {std::sin(ang),  std::cos(ang)} };
     return rotation_matrix * vec;
 }
+
+class PhysicsMan {
+public:
+    PhysicsMan(int w, int h, double cr)
+        : width (w), height (h), coef (cr) {
+        
+    }
+    void update(std::vector<Ball>& balls) {
+        for (auto& b : balls) {
+            b.pos += b.vel;
+            if (b.pos.x - b.r < 0) {
+                b.vel.x *= - coef;
+                b.pos.x = b.r;
+            } else if (b.pos.x + b.r > width) {
+                b.vel.x *= - coef;
+                b.pos.x = width - b.r;
+            }
+            if (b.pos.y - b.r < 0) {
+                b.vel.y *= - coef;
+                b.pos.y = b.r;
+            } else if (b.pos.y + b.r > height) {
+                b.vel.y *= - coef;
+                b.pos.y = height - b.r;
+            }
+        }
+        for (std::size_t i { 0 }; i < balls.size() - 1; ++i) {
+            for (std::size_t j { i + 1 }; j < balls.size(); ++j) {
+                Ball& a { balls[i] };
+                Ball& b { balls[j] };
+                if (glm::distance(a.pos, b.pos) <= a.r + b.r) {
+                    double angle { std::atan2(a.pos.y - b.pos.y, a.pos.x - b.pos.x) };
+                    std::cout << "dy: " << a.pos.y - b.pos.y << "; dx: " << a.pos.x - b.pos.x << "; angulo: " << angle * 180.0 / 3.1415926535 << '\n';
+                    auto   rot { std::bind(rotate2D, std::placeholders::_1,  angle) };
+                    auto unrot { std::bind(rotate2D, std::placeholders::_1, -angle) };
+
+                    Transform<glm::dvec2> vel_a_ { a.vel, rot, unrot };
+                    Transform<glm::dvec2> vel_b_ { b.vel, rot, unrot };
+                    Transform<glm::dvec2> pos_a_ { a.pos, rot, unrot };
+                    Transform<glm::dvec2> pos_b_ { b.pos, rot, unrot };
+                    double mass_a { 3.14 * a.r * a.r };
+                    double mass_b { 3.14 * b.r * b.r };
+                    glm::dvec2 vcm { (mass_a * (*vel_a_) + mass_b * (*vel_b_)) / (mass_a + mass_b) };
+                    
+                    vel_a_ = (1.0 + coef) * vcm - coef * (*vel_a_);
+                    vel_b_ = (1.0 + coef) * vcm - coef * (*vel_b_);
+                    
+                    double overlap { a.r + b.r - ((*pos_a_).x - (*pos_b_).x) };
+                    pos_a_ = (*pos_a_) + glm::dvec2 { overlap / 2.0, 0.0 };
+                    pos_b_ = (*pos_b_) - glm::dvec2 { overlap / 2.0, 0.0 };
+                }
+            }
+        }
+    }
+private:
+    double width;
+    double height;
+    double coef;
+};
+
 
 int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
     constexpr int screen_width { 640 };
@@ -418,10 +433,6 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
         balls.push_back({{x, y}, {(std::rand() % 8 + 2.0) / 100.0, (std::rand() % 8 + 2.0) / 100.0}, radius});
     }
     balls.push_back({{300.0, 150.0}, {0.0, 0.0}, 5.0});
-    // // Ball b { screen_width / 2, screen_height / 2, 80, 1, 1 }; int k = 0;
-    // int k { 0 };
-    // balls.push_back({{screen_width / 5.0, screen_height / 2.0}, {0.01, 0}, 40.0});
-    // balls.push_back({{screen_width - screen_width / 5.0, screen_height / 2.0 - 30.0}, {-0.02, 0}, 40.0});
     PhysicsMan guy { screen_width, screen_height, 1.0 };
     while (!quit) {
         while (SDL_PollEvent(&e)) {
@@ -429,172 +440,15 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
                 quit = true;
             }
         }
-        // SDL_SetRenderDrawColor(renderer.getRenderer(), 0xff, 0xff, 0xff, 0xff);
         renderer.setDrawColor(0xff, 0xff, 0xff, 0xff);
-        // SDL_RenderClear(renderer.getRenderer());
         renderer.clear();
-
-        // SDL_Rect topLeftViewport { 0, 0, screen_width / 2, screen_height / 2 };
-        // SDL_RenderSetViewport(renderer.getRenderer(), &topLeftViewport);
-        // renderer.setViewport( { 0, 0, screen_width / 2, screen_height / 2 } );
-        // SDL_RenderCopy(renderer.getRenderer(), texture.getTexture(), nullptr, nullptr);
-        // renderer.copy(texture);
-
-        // SDL_Rect topRightViewport { screen_width / 2, 0,
-        //                             screen_width / 2, screen_height / 2 };
-        // SDL_RenderSetViewport(renderer.getRenderer(), &topRightViewport);
-        // SDL_RenderCopy(renderer.getRenderer(), texture.getTexture(), nullptr, nullptr);
-        // renderer.setViewport( { screen_width / 2, 0, 
-        //                         screen_width / 2, screen_height / 2 } );
-        // renderer.copy(texture);
-
-        // SDL_Rect bottomViewport { 0, screen_height / 2,
-        //                screen_width, screen_height / 2 };
-        // SDL_RenderSetViewport(renderer.getRenderer(), &bottomViewport);
-        // SDL_RenderCopy(renderer.getRenderer(), texture.getTexture(), nullptr, nullptr);
-        // renderer.setViewport( { 0, screen_height / 2, 
-        //              screen_width, screen_height / 2 } );
-        // renderer.copy(texture);
-
-        // SDL_Rect fillRect { screen_width / 4, screen_height / 4,
-        //                     screen_width / 2, screen_height / 2 };
-        // SDL_SetRenderDrawColor(renderer.getRenderer(), 0xff, 0x00, 0x00, 0xff);
-        // renderer.setDrawColor(0xff, 0x00, 0x00, 0xff);
-        // SDL_RenderFillRect(renderer.getRenderer(), &fillRect);
-        // renderer.fillRect( { screen_width / 4, screen_height / 4,
-        //                      screen_width / 2, screen_height / 2 } );
-
-        // SDL_Rect outlineRect { screen_width / 6    , screen_height / 6,
-        //                        screen_width * 2 / 3, screen_height * 2 / 3 };
-        // SDL_SetRenderDrawColor(renderer.getRenderer(), 0x00, 0xff, 0x00, 0xff);
-        // renderer.setDrawColor(0x00, 0xff, 0x00, 0xff);
-        // SDL_RenderDrawRect(renderer.getRenderer(), &outlineRect);
-        // renderer.drawRect( { screen_width / 6    , screen_height / 6,
-        //                      screen_width * 2 / 3, screen_height * 2 / 3 } );
-        
-        // SDL_SetRenderDrawColor(renderer.getRenderer(), 0x00, 0x00, 0xff, 0xff);
-        // renderer.setDrawColor(0x00, 0x00, 0xff, 0xff);
-        // SDL_RenderDrawLine(renderer.getRenderer(), 0, screen_height / 2,
-        //                                 screen_width, screen_height / 2);
-        // renderer.drawLine(0, screen_height / 2, screen_width, screen_height / 2);
-
-        // SDL_SetRenderDrawColor(renderer.getRenderer(), 0xff, 0xff, 0x00, 0xff);
-        // renderer.setDrawColor(0xff, 0xff, 0x00, 0xff);
-        // for (int i { 0 }; i < screen_height; ++i) {
-            // SDL_RenderDrawPoint(renderer.getRenderer(), screen_width / 2, i);
-            // renderer.drawPoint(screen_width / 2, i);
-        // }
-
         renderer.setDrawColor(0x00, 0x00, 0x00, 0xff);
-        // k %= 300;
-        // k %= 120;
-        // if (k == 0) {
-            for (auto& b : balls) {
-                guy.update(b); //b.update();
-            }
-            for (std::size_t i { 0 }; i < balls.size() - 1; ++i) {
-                for (std::size_t j { i + 1 }; j < balls.size(); ++j) {
-                    Ball& a { balls[i] };
-                    Ball& b { balls[j] };
-                    // auto dist { [] (Ball& b1, Ball& b2) {
-                    //     return std::sqrt(
-                    //         static_cast<double>((b1.x - b2.x) * (b1.x - b2.x) +
-                    //                             (b1.y - b2.y) * (b1.y - b2.y))
-                    //     );
-                    // } };
-                    if (glm::distance(a.pos, b.pos) <= a.r + b.r) {
-                        // a.vx = -b.vy;
-                        // a.vy = -b.vx;
-                        // b.vx = -a.vy;
-                        // b.vy = -a.vx;
-                        // std::valarray<double> vel_a { static_cast<double>(a.vx), static_cast<double>(a.vy) };
-                        // std::valarray<double> vel_b { static_cast<double>(b.vx), static_cast<double>(b.vy) };
-                        // std::valarray<double> vel_a { a.vx, a.vy };
-                        // std::valarray<double> vel_b { b.vx, b.vy };
-                        // auto rotate { [=] (const glm::dvec2& v) {
-                        //     // double ang { std::atan2(a.pos.y - b.pos.y, a.pos.x - b.pos.x) };
-                        //     double ang { std::atan2(a.pos.y - b.pos.y, a.pos.x - b.pos.x) };
-                        //     glm::dmat2 rot { {std::cos(ang), -std::sin(ang)},
-                        //                      {std::sin(ang),  std::cos(ang)} };
-                        //     return rot * v;
-                        //     // return std::valarray<double> { v[0] * std::cos(ang) - 
-                        //     //                                v[1] * std::sin(ang),
-                        //     //                                v[0] * std::sin(ang) +
-                        //     //                                v[1] * std::cos(ang) };
-                        // } };
-                        // auto unrotate { [=] (const glm::dvec2& v_) {
-                        //     double ang { std::atan2(a.pos.y - b.pos.y, a.pos.x - b.pos.x) };
-                        //     glm::dmat2 rot { { std::cos(ang), std::sin(ang)},
-                        //                      {-std::sin(ang), std::cos(ang)} };
-                        //     return rot * v_;
-                        //     // double ang { std::atan2(a.y - b.y, a.x - b.x) };
-                        //     // return std::valarray<double> { v_[0] * std::cos(ang) + 
-                        //     //                                v_[1] * std::sin(ang),
-                        //     //                                v_[0] * std::sin(ang) -
-                        //     //                                v_[1] * std::cos(ang) };
-                        // } };
-                        double angle { std::atan2(b.pos.y - a.pos.y, a.pos.x - b.pos.x) };
-                        std::cout << "dy: " << a.pos.y - b.pos.y << "; dx: " << a.pos.x - b.pos.x << "; angulo: " << angle * 180.0 / 3.1415926535 << '\n';
-                        auto   rot { std::bind(rotate, std::placeholders::_1,  angle) };
-                        auto unrot { std::bind(rotate, std::placeholders::_1, -angle) };
-                        Transform<glm::dvec2> vel_a_ { a.vel, rot, unrot };
-                        Transform<glm::dvec2> vel_b_ { b.vel, rot, unrot };
-                        Transform<glm::dvec2> pos_a_ { a.pos, rot, unrot };
-                        Transform<glm::dvec2> pos_b_ { b.pos, rot, unrot };
-                        // auto refcm { [=] (const double& v) mutable {
-                        //     return v - ((*vel_a_).x + (*vel_b_).x) / 2.0;
-                        // } };
-                        // auto unrefcm { [=] (const double& v_) mutable {
-                        //     return v_ + ((*vel_a_).x + (*vel_b_).x) / 2.0;
-                        // } };
-                        // Transform<double> vel_ax_cm { (*vel_a_).x, refcm, unrefcm};
-                        // Transform<double> vel_bx_cm { (*vel_b_).x, refcm, unrefcm};
-                        // vel_ax_cm = - (*vel_ax_cm);
-                        // vel_bx_cm = - (*vel_bx_cm);
-                        // vel_a_.update();
-                        // vel_b_.update();
-                        // glm::dvec2 vcm { (a.r * (*vel_a_) + b.r * (*vel_b_)) / (a.r + b.r) };
-                        double mass_a { 3.14 * a.r * a.r };
-                        double mass_b { 3.14 * b.r * b.r };
-                        glm::dvec2 vcm { (mass_a * (*vel_a_) + mass_b * (*vel_b_)) / (mass_a + mass_b) };
-                        // double cr { 1.0 };
-                        double cr { 1.0 };
-                        vel_a_ = (1.0 + cr) * vcm - cr * (*vel_a_);
-                        vel_b_ = (1.0 + cr) * vcm - cr * (*vel_b_);
-                        // pos_a_ = (*pos_a_) + glm::dvec2 { ((*pos_a_).x - (*pos_b_).x) / 2.0, 0.0 };
-                        // pos_b_ = (*pos_b_) + glm::dvec2 { ((*pos_b_).x - (*pos_a_).x) / 2.0, 0.0 };
-                        double overlap { a.r + b.r - ((*pos_a_).x - (*pos_b_).x) };
-                        pos_a_ = (*pos_a_) + glm::dvec2 { overlap / 2.0, 0.0 };
-                        pos_b_ = (*pos_b_) - glm::dvec2 { overlap / 2.0, 0.0 };
-                        // a.vx = vel_a[0];
-                        // a.vy = vel_a[1];
-                        // b.vx = vel_b[0];
-                        // b.vy = vel_b[1];
-                    }
-                }
-            }
-        // }
-        // ++k;
+        guy.update(balls);
+
         for (auto& b : balls) {
             b.render(renderer, tex);
         }
-
         renderer.swap();
-        // SDL_RenderPresent(renderer.getRenderer());
-        // SDL_FillRect(screenSurface,
-        //             nullptr,
-        //             SDL_MapRGB(screenSurface->format, 0xff, 0xff, 0xff));
-        // SDL_Rect stretchRect { 0, 0, screen_width, screen_height };
-        // SDL_BlitScaled(image.getSurface(), nullptr, screenSurface, &stretchRect);
-        // SDL_BlitSurface(image.getSurface(), nullptr, screenSurface, nullptr);
-
-        // window.update();
     }
-
-    // SDL_FillRect(screenSurface,
-    //              nullptr,
-    //              SDL_MapRGB(screenSurface->format, 0xff, 0xff, 0xff));
-
-    // SDL_Delay(2000);
     return 0;
 }
