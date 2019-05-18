@@ -290,7 +290,21 @@ SDL_Texture* SDLtextureegg::getTexture() const {
 //         y += vy;
 //     }
 // };
-struct Ball {
+class PhysicsObj {
+public:
+    glm::dvec2 pos;
+    glm::dvec2 vel;
+    double mass;
+private:
+
+};
+
+class Ball {
+public:
+    Ball(const glm::dvec2& p, const glm::dvec2& v, double radius)
+        : pos (p), vel (v), r (radius) {
+        
+    }
     glm::dvec2 pos;
     glm::dvec2 vel;
     double r;
@@ -363,6 +377,13 @@ private:
     transform inv_;
 };
 
+glm::dvec2 rotate(const glm::dvec2& vec, double ang);
+glm::dvec2 rotate(const glm::dvec2& vec, double ang) {
+    glm::dmat2 rotation_matrix { {std::cos(ang), -std::sin(ang)},
+                                 {std::sin(ang),  std::cos(ang)} };
+    return rotation_matrix * vec;
+}
+
 int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
     constexpr int screen_width { 640 };
     constexpr int screen_height { 480 };
@@ -385,16 +406,22 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
 
     SDL_Event e;
     bool quit { false };
-    int n_balls { std::rand() % 7 + 3 };
+    // int n_balls { std::rand() % 17 + 3 };
+    int n_balls { 3 };
     std::vector<Ball> balls;
     for (int i { 0 }; i < n_balls; ++i) {
-        double radius { std::rand() % 40 + 40.0 };
+        // double radius { std::rand() % 10 + 10.0 };
+        double radius { 40.0 };
         double x { std::rand() % (screen_width - 2 * static_cast<int>(radius)) + radius };
         double y { std::rand() % (screen_height - 2 * static_cast<int>(radius)) + radius };
-        balls.push_back({{x, y}, {std::rand() % 15 + 2.0, std::rand() % 15 + 2.0}, radius});
+        // balls.push_back({{x, y}, {std::rand() % 8 + 2.0, std::rand() % 8 + 2.0}, radius});
+        balls.push_back({{x, y}, {(std::rand() % 8 + 2.0) / 100.0, (std::rand() % 8 + 2.0) / 100.0}, radius});
     }
-    // Ball b { screen_width / 2, screen_height / 2, 80, 1, 1 }; int k = 0;
-    int k { 0 };
+    balls.push_back({{300.0, 150.0}, {0.0, 0.0}, 5.0});
+    // // Ball b { screen_width / 2, screen_height / 2, 80, 1, 1 }; int k = 0;
+    // int k { 0 };
+    // balls.push_back({{screen_width / 5.0, screen_height / 2.0}, {0.01, 0}, 40.0});
+    // balls.push_back({{screen_width - screen_width / 5.0, screen_height / 2.0 - 30.0}, {-0.02, 0}, 40.0});
     PhysicsMan guy { screen_width, screen_height, 1.0 };
     while (!quit) {
         while (SDL_PollEvent(&e)) {
@@ -460,8 +487,8 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
 
         renderer.setDrawColor(0x00, 0x00, 0x00, 0xff);
         // k %= 300;
-        k %= 30;
-        if (k == 0) {
+        // k %= 120;
+        // if (k == 0) {
             for (auto& b : balls) {
                 guy.update(b); //b.update();
             }
@@ -484,32 +511,36 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
                         // std::valarray<double> vel_b { static_cast<double>(b.vx), static_cast<double>(b.vy) };
                         // std::valarray<double> vel_a { a.vx, a.vy };
                         // std::valarray<double> vel_b { b.vx, b.vy };
-                        auto rotate { [=] (const glm::dvec2& v) {
-                            // double ang { std::atan2(a.pos.y - b.pos.y, a.pos.x - b.pos.x) };
-                            double ang { std::atan2(a.pos.y - b.pos.y, a.pos.x - b.pos.x) };
-                            glm::dmat2 rot { {std::cos(ang), -std::sin(ang)},
-                                             {std::sin(ang),  std::cos(ang)} };
-                            return rot * v;
-                            // return std::valarray<double> { v[0] * std::cos(ang) - 
-                            //                                v[1] * std::sin(ang),
-                            //                                v[0] * std::sin(ang) +
-                            //                                v[1] * std::cos(ang) };
-                        } };
-                        auto unrotate { [=] (const glm::dvec2& v_) {
-                            double ang { std::atan2(a.pos.y - b.pos.y, a.pos.x - b.pos.x) };
-                            glm::dmat2 rot { { std::cos(ang), std::sin(ang)},
-                                             {-std::sin(ang), std::cos(ang)} };
-                            return rot * v_;
-                            // double ang { std::atan2(a.y - b.y, a.x - b.x) };
-                            // return std::valarray<double> { v_[0] * std::cos(ang) + 
-                            //                                v_[1] * std::sin(ang),
-                            //                                v_[0] * std::sin(ang) -
-                            //                                v_[1] * std::cos(ang) };
-                        } };
-                        Transform<glm::dvec2> vel_a_ { a.vel, rotate, unrotate };
-                        Transform<glm::dvec2> vel_b_ { b.vel, rotate, unrotate };
-                        Transform<glm::dvec2> pos_a_ { a.pos, rotate, unrotate };
-                        Transform<glm::dvec2> pos_b_ { b.pos, rotate, unrotate };
+                        // auto rotate { [=] (const glm::dvec2& v) {
+                        //     // double ang { std::atan2(a.pos.y - b.pos.y, a.pos.x - b.pos.x) };
+                        //     double ang { std::atan2(a.pos.y - b.pos.y, a.pos.x - b.pos.x) };
+                        //     glm::dmat2 rot { {std::cos(ang), -std::sin(ang)},
+                        //                      {std::sin(ang),  std::cos(ang)} };
+                        //     return rot * v;
+                        //     // return std::valarray<double> { v[0] * std::cos(ang) - 
+                        //     //                                v[1] * std::sin(ang),
+                        //     //                                v[0] * std::sin(ang) +
+                        //     //                                v[1] * std::cos(ang) };
+                        // } };
+                        // auto unrotate { [=] (const glm::dvec2& v_) {
+                        //     double ang { std::atan2(a.pos.y - b.pos.y, a.pos.x - b.pos.x) };
+                        //     glm::dmat2 rot { { std::cos(ang), std::sin(ang)},
+                        //                      {-std::sin(ang), std::cos(ang)} };
+                        //     return rot * v_;
+                        //     // double ang { std::atan2(a.y - b.y, a.x - b.x) };
+                        //     // return std::valarray<double> { v_[0] * std::cos(ang) + 
+                        //     //                                v_[1] * std::sin(ang),
+                        //     //                                v_[0] * std::sin(ang) -
+                        //     //                                v_[1] * std::cos(ang) };
+                        // } };
+                        double angle { std::atan2(b.pos.y - a.pos.y, a.pos.x - b.pos.x) };
+                        std::cout << "dy: " << a.pos.y - b.pos.y << "; dx: " << a.pos.x - b.pos.x << "; angulo: " << angle * 180.0 / 3.1415926535 << '\n';
+                        auto   rot { std::bind(rotate, std::placeholders::_1,  angle) };
+                        auto unrot { std::bind(rotate, std::placeholders::_1, -angle) };
+                        Transform<glm::dvec2> vel_a_ { a.vel, rot, unrot };
+                        Transform<glm::dvec2> vel_b_ { b.vel, rot, unrot };
+                        Transform<glm::dvec2> pos_a_ { a.pos, rot, unrot };
+                        Transform<glm::dvec2> pos_b_ { b.pos, rot, unrot };
                         // auto refcm { [=] (const double& v) mutable {
                         //     return v - ((*vel_a_).x + (*vel_b_).x) / 2.0;
                         // } };
@@ -527,7 +558,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
                         double mass_b { 3.14 * b.r * b.r };
                         glm::dvec2 vcm { (mass_a * (*vel_a_) + mass_b * (*vel_b_)) / (mass_a + mass_b) };
                         // double cr { 1.0 };
-                        double cr { 0.95 };
+                        double cr { 1.0 };
                         vel_a_ = (1.0 + cr) * vcm - cr * (*vel_a_);
                         vel_b_ = (1.0 + cr) * vcm - cr * (*vel_b_);
                         // pos_a_ = (*pos_a_) + glm::dvec2 { ((*pos_a_).x - (*pos_b_).x) / 2.0, 0.0 };
@@ -542,8 +573,8 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
                     }
                 }
             }
-        }
-        ++k;
+        // }
+        // ++k;
         for (auto& b : balls) {
             b.render(renderer, tex);
         }
