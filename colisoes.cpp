@@ -1,7 +1,10 @@
 #include <iostream>
 #include <string>
+#include <sstream>
 #include <vector>
 #include <cmath>
+#include <memory>
+#include <algorithm>
 #include <SDL2/SDL.h>
 
 #include <SDL2/SDL_image.h>
@@ -21,55 +24,33 @@ public:
     void setAntiAliasing(const char* option);
     ~Sdl();
 
-    class Window;
-    class Image;
-    class Texture;
-    class Renderer;
+    void handleEvents();
+    std::size_t openWindows() const;
 
-    Window& createWindow(const std::string& title, int w, int h);
-    Window& createWindow(const std::string& title, int w, int h, Uint32 flags);
-    Window& createWindow(const std::string& title, int x, int y,
-                                                   int w, int h, Uint32 flags);
+    class Window;
+    // class Image;
+    class Renderer;
+    class Texture;
+
+    // Window& createWindow(const std::string& title, int w, int h);
+    // Window& createWindow(const std::string& title, int w, int h, Uint32 flags);
+    Window& createWindow(const std::string& title, int w, int h,
+                         int x = SDL_WINDOWPOS_UNDEFINED,
+                         int y = SDL_WINDOWPOS_UNDEFINED,
+                         Uint32 flags = SDL_WINDOW_SHOWN);
 private:
     std::vector<Window> windows;
 };
 
-class Sdl::Window {
-public:
-    friend class Sdl;
-    Window(const Window&) = delete;
-    Window(Window&&);
-
-    SDL_Surface* getSurface() const;
-    SDL_PixelFormat* getFormat() const;
-    SDL_Window* getWindow() const;
-    void update() const;
-    ~Window();
-private:
-    Window(const std::string& title, int w, int h);
-    Window(const std::string& title, int w, int h, Uint32 flags);
-    Window(const std::string& title, int x, int y,
-                                     int w, int h, Uint32 flags);
-    SDL_Window* window;
-};
-
-class Sdl::Image {
-public:
-    Image(const std::string& path_to_image, const SDL_PixelFormat* fmt);
-    Image(const std::string& path_to_image);
-    ~Image();
-    SDL_Surface* getSurface() const;
-    std::string getName() const;
-private:
-    SDL_Surface* image;
-    std::string name;
-};
-
 class Sdl::Renderer {
 public:
-    Renderer(const Sdl::Window& window, Uint32 flags);
+    friend class Sdl::Window;
+    Renderer(const Renderer&) = delete;
+    Renderer(Renderer&&);
+    Renderer& operator=(Renderer&&);
     ~Renderer();
     SDL_Renderer* getRenderer() const;
+    Uint32 getPixelFormat() const;
     void setDrawColor(Uint8 r, Uint8 g, Uint8 b, Uint8 a) const;
     void drawPoint(int x, int y) const;
     void drawLine(int x1, int y1, int x2, int y2) const;
@@ -82,16 +63,57 @@ public:
     void copy(const Sdl::Texture& texture, SDL_Rect dst) const;
     void copy(const Sdl::Texture& texture, SDL_Rect src, SDL_Rect dst) const;
 private:
-    SDL_Renderer* renderer;
+    Renderer(SDL_Window* window, Uint32 flags = SDL_RENDERER_ACCELERATED |
+                                                SDL_RENDERER_TARGETTEXTURE);
+    SDL_Renderer* renderer { nullptr };
 };
+
+class Sdl::Window {
+public:
+    friend class Sdl;
+    Window(const Window&) = delete;
+    Window(Window&&);
+    Window& operator=(Window&&);
+
+    // SDL_Surface* getSurface() const;
+    SDL_PixelFormat* getFormat() const;
+    SDL_Window* getWindow() const;
+    Sdl::Renderer& getRenderer();
+    void update() const;
+    ~Window();
+private:
+    // Window(const std::string& title, int w, int h);
+    // Window(const std::string& title, int w, int h, Uint32 flags);
+    Window(const std::string& title, int w, int h, 
+                                     int x = SDL_WINDOWPOS_UNDEFINED,
+                                     int y = SDL_WINDOWPOS_UNDEFINED,
+                                     Uint32 flags = SDL_WINDOW_SHOWN);
+    SDL_Window* window { nullptr };
+    std::unique_ptr<Sdl::Renderer> renderer;
+    Uint32 id { 0 };
+};
+
+// class Sdl::Image {
+// public:
+//     Image(const std::string& path_to_image, const SDL_PixelFormat* fmt);
+//     Image(const std::string& path_to_image);
+//     ~Image();
+//     SDL_Surface* getSurface() const;
+//     std::string getName() const;
+// private:
+//     SDL_Surface* image;
+//     std::string name;
+// };
 
 class Sdl::Texture {
 public:
-    Texture(const Sdl::Renderer& renderer, const Sdl::Image& image);
+    Texture(const Texture&) = delete;
+    Texture(const Sdl::Renderer& renderer, int w, int h);
+    Texture(const Sdl::Renderer& renderer, const std::string& image);
     ~Texture();
     SDL_Texture* getTexture() const;
 private:
-    SDL_Texture* texture;
+    SDL_Texture* texture { nullptr };
 };
 
 // Sdl //
@@ -118,53 +140,59 @@ void Sdl::setAntiAliasing(const char* option) {
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, option);
 }
 
-Sdl::Window&
-Sdl::createWindow(const std::string& title, int w, int h) {
-    windows.push_back(Sdl::Window { title, w, h, SDL_WINDOW_SHOWN });
-    return windows.back();
+void Sdl::handleEvents() {
+    SDL_Event e;
+    while (SDL_PollEvent(&e)) {
+        if (e.type == SDL_WINDOWEVENT) {
+            if (e.window.event == SDL_WINDOWEVENT_CLOSE) {
+                windows.erase(std::remove_if(windows.begin(), windows.end(), 
+                [=] (const Sdl::Window& win) { return e.window.windowID == win.id; } ), windows.end());
+            }
+        }
+    }
 }
 
-Sdl::Window&
-Sdl::createWindow(const std::string& title, int w, int h, Uint32 flags) {
-    windows.push_back(Sdl::Window { title, SDL_WINDOWPOS_UNDEFINED,
-                                           SDL_WINDOWPOS_UNDEFINED, w, h,
-                                           flags });
-    return windows.back();
+std::size_t Sdl::openWindows() const {
+    return windows.size();
 }
 
 Sdl::Window&
 Sdl::createWindow(const std::string& title, int x, int y,
                                             int w, int h, Uint32 flags) {
-    windows.push_back(Sdl::Window { title, x, y, w, h, flags });
+    windows.push_back(Sdl::Window { title, w, h, x, y, flags });
     return windows.back();
 }
 // Sdl //
 
 // Window //
-Sdl::Window::Window(Window&& other) {
+Sdl::Window::Window(Window&& other)
+    : renderer (std::move(other.renderer)) {
     window = other.window;
     other.window = nullptr;
+    id = other.id;
+    other.id = 0;
 }
 
-Sdl::Window::Window(const std::string& title, int w, int h)
-    : Window(title, w, h, SDL_WINDOW_SHOWN) {
-    
-}
-
-Sdl::Window::Window(const std::string& title, int w, int h, Uint32 flags) 
-    : Window(title, SDL_WINDOWPOS_UNDEFINED,
-                        SDL_WINDOWPOS_UNDEFINED, w, h, flags) {
-    
+Sdl::Window& Sdl::Window::operator=(Sdl::Window&& other) {
+    window = other.window;
+    other.window = nullptr;
+    renderer = std::move(other.renderer);
+    id = other.id;
+    other.id = 0;
+    return *this;
 }
 
 Sdl::Window::Window(const std::string& title, int x, int y,
-                                    int w, int h, Uint32 flags)
+                                              int w, int h, Uint32 flags)
     : window (SDL_CreateWindow(title.c_str(), x, y, w, h, flags)) {
     if (!window) {
         std::cerr << "Window could not be created! SDL_Error: " <<
                         SDL_GetError() << '\n';
         throw -1;
     }
+    // renderer = std::make_unique<Sdl::Renderer>(window);
+    renderer = std::unique_ptr<Sdl::Renderer>(new Sdl::Renderer { window });
+    id = SDL_GetWindowID(window);
 }
 
 Sdl::Window::~Window() {
@@ -173,9 +201,9 @@ Sdl::Window::~Window() {
     }
 }
 
-SDL_Surface* Sdl::Window::getSurface() const {
-    return SDL_GetWindowSurface(window);
-}
+// SDL_Surface* Sdl::Window::getSurface() const {
+//     return SDL_GetWindowSurface(window);
+// }
 
 SDL_PixelFormat* Sdl::Window::getFormat() const {
     return SDL_GetWindowSurface(window)->format;
@@ -185,55 +213,34 @@ SDL_Window* Sdl::Window::getWindow() const {
     return window;
 }
 
+Sdl::Renderer& Sdl::Window::getRenderer() {
+    return *renderer;
+}
+
 void Sdl::Window::update() const {
     SDL_UpdateWindowSurface(window);
 }
 // Window //
 
-// Image //
-Sdl::Image::Image(const std::string& path_to_image, const SDL_PixelFormat* fmt)
-    : Image(path_to_image) {
-    auto optimized { SDL_ConvertSurface(image, fmt, 0) };
-    if (!optimized) {
-        std::cerr << "Unable to optimize image " << path_to_image <<
-                        "! SDL_Error: " << SDL_GetError() << '\n';
-        throw -1;
-    }
-    SDL_FreeSurface(image);
-    image = optimized;
-} 
-
-Sdl::Image::Image(const std::string& path_to_image) 
-    : image (IMG_Load(path_to_image.c_str())), name (path_to_image) {
-    // : image(SDL_LoadBMP(path_to_image.c_str())) {
-    if (!image) {
-        std::cerr << "Unable to load image " << path_to_image <<
-                        "! SDL_image_Error: " << IMG_GetError() << '\n';
-        throw -1;
-    }
-}
-
-Sdl::Image::~Image() {
-    SDL_FreeSurface(image);
-}
-
-SDL_Surface* Sdl::Image::getSurface() const {
-    return image;
-}
-
-std::string Sdl::Image::getName() const {
-    return name;
-}
-// Image //
-
 // Renderer //
-Sdl::Renderer::Renderer(const Window& window, Uint32 flags)
-    : renderer (SDL_CreateRenderer(window.getWindow(), -1, flags)) {
+Sdl::Renderer::Renderer(SDL_Window* window, Uint32 flags)
+    : renderer (SDL_CreateRenderer(window, -1, flags)) {
     if (!renderer) {
         std::cerr << "Renderer could not be created! SDL_Error: " <<
                         SDL_GetError() << '\n';
         throw -1;
     }
+}
+
+Sdl::Renderer::Renderer(Renderer&& other) {
+    renderer = other.renderer;
+    other.renderer = nullptr;
+}
+
+Sdl::Renderer& Sdl::Renderer::operator=(Sdl::Renderer&& other) {
+    renderer = other.renderer;
+    other.renderer = nullptr;
+    return *this;
 }
 
 Sdl::Renderer::~Renderer() {
@@ -242,6 +249,12 @@ Sdl::Renderer::~Renderer() {
 
 SDL_Renderer* Sdl::Renderer::getRenderer() const {
     return renderer;
+}
+
+Uint32 Sdl::Renderer::getPixelFormat() const {
+    SDL_RendererInfo info;
+    SDL_GetRendererInfo(renderer, &info);
+    return info.texture_formats[0];
 }
 
 void Sdl::Renderer::setDrawColor(Uint8 r, Uint8 g, Uint8 b, Uint8 a) const {
@@ -290,11 +303,28 @@ void Sdl::Renderer::copy(const Texture& texture, SDL_Rect src, SDL_Rect dst) con
 // Renderer //
 
 // Texture //
-Sdl::Texture::Texture(const Renderer& renderer, const Image& image)
-    : texture (SDL_CreateTextureFromSurface(renderer.getRenderer(),
-                                            image.getSurface())) {
+Sdl::Texture::Texture(const Renderer& renderer, int w, int h)
+    : texture (SDL_CreateTexture(renderer.getRenderer(),
+                                 renderer.getPixelFormat(),
+                                 SDL_TEXTUREACCESS_TARGET,
+                                 w, h)) {
     if (!texture) {
-        std::cerr << "Unable to create texture from " << image.getName() <<
+        std::cerr << "Unable to create texture! SDL_Error: " <<
+                      SDL_GetError() << '\n';
+        throw -1;
+    }
+}
+
+Sdl::Texture::Texture(const Renderer& renderer, const std::string& image) {
+    SDL_Surface* surface { IMG_Load(image.c_str()) };
+    if (!surface) {
+        std::cerr << "Unable to load image " << image <<
+                        "! IMG_Error: " << IMG_GetError() << '\n';
+        throw -1;
+    }
+    texture = SDL_CreateTextureFromSurface(renderer.getRenderer(), surface);
+    if (!texture) {
+        std::cerr << "Unable to create texture from " << image <<
                         "! SDL_Error: " << SDL_GetError() << '\n';
         throw -1;
     }
@@ -342,13 +372,14 @@ SDL_Texture* Sdl::Texture::getTexture() const {
 
 class Ball {
 public:
-    Ball(const glm::dvec2& p, const glm::dvec2& v, double radius)
-        : pos (p), vel (v), r (radius) {
+    Ball(const glm::dvec2& p, const glm::dvec2& v, double radius, double area_density)
+        : pos (p), vel (v), r (radius), mass (area_density * r * r * std::atan(1) * 4.0) {
         
     }
     glm::dvec2 pos;
     glm::dvec2 vel;
     double r;
+    double mass;
 
     void render(const Sdl::Renderer& renderer, const Sdl::Texture& tex) {
         renderer.copy(tex, { static_cast<int>(pos.x - r), static_cast<int>(pos.y - r), static_cast<int>(2 * r), static_cast<int>(2 * r) });
@@ -419,7 +450,7 @@ public:
                 Ball& b { balls[j] };
                 if (glm::distance(a.pos, b.pos) <= a.r + b.r) {
                     double angle { std::atan2(a.pos.y - b.pos.y, a.pos.x - b.pos.x) };
-                    std::cout << "dy: " << a.pos.y - b.pos.y << "; dx: " << a.pos.x - b.pos.x << "; angulo: " << angle * 180.0 / 3.1415926535 << '\n';
+                    // std::cout << "dy: " << a.pos.y - b.pos.y << "; dx: " << a.pos.x - b.pos.x << "; angulo: " << angle * 180.0 / 3.1415926535 << '\n';
                     auto   rot { std::bind(rotate2D, std::placeholders::_1,  angle) };
                     auto unrot { std::bind(rotate2D, std::placeholders::_1, -angle) };
 
@@ -427,16 +458,18 @@ public:
                     Transform<glm::dvec2> vel_b_ { b.vel, rot, unrot };
                     Transform<glm::dvec2> pos_a_ { a.pos, rot, unrot };
                     Transform<glm::dvec2> pos_b_ { b.pos, rot, unrot };
-                    double mass_a { 3.14 * a.r * a.r };
-                    double mass_b { 3.14 * b.r * b.r };
-                    glm::dvec2 vcm { (mass_a * (*vel_a_) + mass_b * (*vel_b_)) / (mass_a + mass_b) };
+                    // double mass_a { 3.14 * a.r * a.r };
+                    // double mass_b { 3.14 * b.r * b.r };
+                    glm::dvec2 vcm { (a.mass * (*vel_a_) + b.mass * (*vel_b_)) / (a.mass + b.mass) };
+                    // std::cout << "vcmx: " << vcm.x << "; vcmy: " << vcm.y << '\n';
+                    // std::cout << "v_bx: " << (*vel_b_).x << "; v_by: " << (*vel_b_).y << '\n';
                     
-                    vel_a_ = (1.0 + coef) * vcm - coef * (*vel_a_);
-                    vel_b_ = (1.0 + coef) * vcm - coef * (*vel_b_);
+                    vel_a_ = {((1.0 + coef) * vcm - coef * (*vel_a_)).x, (*vel_a_).y};
+                    vel_b_ = {((1.0 + coef) * vcm - coef * (*vel_b_)).x, (*vel_b_).y};
                     
                     double overlap { a.r + b.r - ((*pos_a_).x - (*pos_b_).x) };
-                    pos_a_ = (*pos_a_) + glm::dvec2 { overlap / 2.0, 0.0 };
-                    pos_b_ = (*pos_b_) - glm::dvec2 { overlap / 2.0, 0.0 };
+                    pos_a_ = (*pos_a_) + glm::dvec2 { overlap * b.mass / (a.mass + b.mass), 0.0 };
+                    pos_b_ = (*pos_b_) - glm::dvec2 { overlap * a.mass / (a.mass + b.mass), 0.0 };
                 }
             }
         }
@@ -447,49 +480,85 @@ private:
     double coef;
 };
 
+#include <random>
+#include <chrono>
 
-int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
-    constexpr int screen_width { 640 };
-    constexpr int screen_height { 480 };
-    std::srand(std::time(nullptr));
-    // SDL_Surface* screenSurface { nullptr };
+class Randomizer {
+public:
+    Randomizer()
+        : mersenne (std::chrono::steady_clock::now().time_since_epoch().count()) {
+
+    }
+    double rand(double min, double max) {
+        return std::uniform_real_distribution<double> {min, max}(mersenne);
+    }
+private:
+    std::mt19937 mersenne;
+};
+
+double toDouble(const char* str);
+double toDouble(const char* str) {
+    std::stringstream ss;
+    ss << str;
+    double ret { 0 };
+    ss >> ret;
+    return ret;
+}
+
+int main(int argc, char* argv[]) {
+    if (argc < 4 || argc > 6) {
+        std::cout << "Uso: colisoes(.exe) largura altura n_bolas [raio] [coef_restituicao=1.0]\n";
+        std::cout << "Se o raio das bolas nao for especificado, cada bola " <<
+                     "terá um raio aleatorio\n";
+        return -1;
+    }
+    
+    // constexpr int screen_width { 640 };
+    // constexpr int screen_height { 480 };
+    int screen_width { static_cast<int>(toDouble(argv[1])) };
+    int screen_height { static_cast<int>(toDouble(argv[2])) };
+    int n_balls { static_cast<int>(toDouble(argv[3])) };
+    double rad { 0 };
+    if (argc >= 5) {
+        rad = toDouble(argv[4]);
+    }
+    double coef { 1.0 };
+    if (argc == 6) {
+        coef = toDouble(argv[5]);
+    }
+    Randomizer gen;
+    // std::cout << std::chrono::steady_clock::now().time_since_epoch().count() << '\n';
 
     Sdl interface { SDL_INIT_VIDEO };
     interface.setAntiAliasing("1");
     Sdl::Window& window { interface.createWindow("Collision simulation", screen_width, screen_height) };
-
-    // screenSurface = window.getSurface();
-    // Image image { "texture.png", window.getFormat() };
-    Sdl::Image image { "texture.png" };
-
-    std::cout << "kk\n";
-    Sdl::Renderer renderer { window, SDL_RENDERER_ACCELERATED | SDL_RENDERER_TARGETTEXTURE };
-    Sdl::Texture texture { renderer, image };
-
-    Sdl::Image circle { "circle.png" };
-    Sdl::Texture tex { renderer, circle };
-
-    SDL_Event e;
-    bool quit { false };
+    Sdl::Renderer& renderer { window.getRenderer() };
+    Sdl::Texture tex { renderer, "circle.png" };
     // int n_balls { std::rand() % 17 + 3 };
-    int n_balls { 3 };
     std::vector<Ball> balls;
     for (int i { 0 }; i < n_balls; ++i) {
         // double radius { std::rand() % 10 + 10.0 };
-        double radius { 40.0 };
-        double x { std::rand() % (screen_width - 2 * static_cast<int>(radius)) + radius };
-        double y { std::rand() % (screen_height - 2 * static_cast<int>(radius)) + radius };
+        double radius { rad ? rad : gen.rand(20.0, 60.0) };
+        // double x { std::rand() % (screen_width - 2 * static_cast<int>(radius)) + radius };
+        // double y { std::rand() % (screen_height - 2 * static_cast<int>(radius)) + radius };
+        Randomizer wid {  };
+        Randomizer hei {  };
+        double x { gen.rand(radius, screen_width  - radius) };
+        double y { gen.rand(radius, screen_height - radius) };
+        double vx { gen.rand(-0.2, 0.2) };
+        double vy { gen.rand(-0.2, 0.2) };
         // balls.push_back({{x, y}, {std::rand() % 8 + 2.0, std::rand() % 8 + 2.0}, radius});
-        balls.push_back({{x, y}, {(std::rand() % 8 + 2.0) / 100.0, (std::rand() % 8 + 2.0) / 100.0}, radius});
+        balls.push_back({{x, y}, { vx, vy }, radius, 1.0});
     }
-    balls.push_back({{300.0, 150.0}, {0.0, 0.0}, 5.0});
-    PhysicsMan guy { screen_width, screen_height, 1.0 };
-    while (!quit) {
-        while (SDL_PollEvent(&e)) {
-            if (e.type == SDL_QUIT) {
-                quit = true;
-            }
-        }
+    // balls.push_back({{300.0, 150.0}, {0.0,  0.0}, 50.0, 1e100});
+    // balls.push_back({{400.0, 350.0}, {0.0,  0.0}, 5.0, 1.0});
+    // balls.push_back({{300.0, 180.0}, {0.0, -0.1}, 40.0, 1.0});
+    // balls.push_back({{300.0, 150.0}, {0.0, 0.0}, 50.0, 1e100});
+    // balls.push_back({{100.0, 220.0}, {0.1, 0.0}, 50.0, 1.0});
+    PhysicsMan guy { screen_width, screen_height, coef };
+    while (interface.openWindows()) {
+        interface.handleEvents();
+
         renderer.setDrawColor(0xff, 0xff, 0xff, 0xff);
         renderer.clear();
         renderer.setDrawColor(0x00, 0x00, 0x00, 0xff);
