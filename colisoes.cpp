@@ -15,34 +15,49 @@
 /**
  * Essa classe existe porque RAII
 */
-class SDLrename {
+class Sdl {
 public:
-    SDLrename(Uint32 flags);
-    ~SDLrename();
-private:
+    Sdl(Uint32 flags);
+    void setAntiAliasing(const char* option);
+    ~Sdl();
 
+    class Window;
+    class Image;
+    class Texture;
+    class Renderer;
+
+    Window& createWindow(const std::string& title, int w, int h);
+    Window& createWindow(const std::string& title, int w, int h, Uint32 flags);
+    Window& createWindow(const std::string& title, int x, int y,
+                                                   int w, int h, Uint32 flags);
+private:
+    std::vector<Window> windows;
 };
 
-class SDLwinaff {
+class Sdl::Window {
 public:
-    SDLwinaff(const std::string& title, int w, int h);
-    SDLwinaff(const std::string& title, int w, int h, Uint32 flags);
-    SDLwinaff(const std::string& title, int x, int y,
-                                        int w, int h, Uint32 flags);
-    ~SDLwinaff();
+    friend class Sdl;
+    Window(const Window&) = delete;
+    Window(Window&&);
+
     SDL_Surface* getSurface() const;
     SDL_PixelFormat* getFormat() const;
     SDL_Window* getWindow() const;
     void update() const;
+    ~Window();
 private:
+    Window(const std::string& title, int w, int h);
+    Window(const std::string& title, int w, int h, Uint32 flags);
+    Window(const std::string& title, int x, int y,
+                                     int w, int h, Uint32 flags);
     SDL_Window* window;
 };
 
-class SDLimageflash {
+class Sdl::Image {
 public:
-    SDLimageflash(const std::string& path_to_image, const SDL_PixelFormat* fmt);
-    SDLimageflash(const std::string& path_to_image);
-    ~SDLimageflash();
+    Image(const std::string& path_to_image, const SDL_PixelFormat* fmt);
+    Image(const std::string& path_to_image);
+    ~Image();
     SDL_Surface* getSurface() const;
     std::string getName() const;
 private:
@@ -50,11 +65,10 @@ private:
     std::string name;
 };
 
-class SDLtextureegg;
-class SDLrendererninja {
+class Sdl::Renderer {
 public:
-    SDLrendererninja(const SDLwinaff& window, Uint32 flags);
-    ~SDLrendererninja();
+    Renderer(const Sdl::Window& window, Uint32 flags);
+    ~Renderer();
     SDL_Renderer* getRenderer() const;
     void setDrawColor(Uint8 r, Uint8 g, Uint8 b, Uint8 a) const;
     void drawPoint(int x, int y) const;
@@ -64,24 +78,24 @@ public:
     void clear() const;
     void swap() const;
     void setViewport(SDL_Rect rect) const;
-    void copy(const SDLtextureegg& texture) const;
-    void copy(const SDLtextureegg& texture, SDL_Rect dst) const;
-    void copy(const SDLtextureegg& texture, SDL_Rect src, SDL_Rect dst) const;
+    void copy(const Sdl::Texture& texture) const;
+    void copy(const Sdl::Texture& texture, SDL_Rect dst) const;
+    void copy(const Sdl::Texture& texture, SDL_Rect src, SDL_Rect dst) const;
 private:
     SDL_Renderer* renderer;
 };
 
-class SDLtextureegg {
+class Sdl::Texture {
 public:
-    SDLtextureegg(const SDLrendererninja& renderer, const SDLimageflash& image);
-    ~SDLtextureegg();
+    Texture(const Sdl::Renderer& renderer, const Sdl::Image& image);
+    ~Texture();
     SDL_Texture* getTexture() const;
 private:
     SDL_Texture* texture;
 };
 
-// SDLrename //
-SDLrename::SDLrename(Uint32 flags) {
+// Sdl //
+Sdl::Sdl(Uint32 flags) {
     if (SDL_Init(flags) < 0) {
         std::cerr << "SDL could not initialize! SDL_Error: " <<
                         SDL_GetError() << '\n';
@@ -95,25 +109,55 @@ SDLrename::SDLrename(Uint32 flags) {
     }
 }
 
-SDLrename::~SDLrename() {
+Sdl::~Sdl() {
     IMG_Quit();
     SDL_Quit();
 }
-// SDLrename //
 
-// SDLwinaff //
-SDLwinaff::SDLwinaff(const std::string& title, int w, int h)
-    : SDLwinaff(title, w, h, SDL_WINDOW_SHOWN) {
+void Sdl::setAntiAliasing(const char* option) {
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, option);
+}
+
+Sdl::Window&
+Sdl::createWindow(const std::string& title, int w, int h) {
+    windows.push_back(Sdl::Window { title, w, h, SDL_WINDOW_SHOWN });
+    return windows.back();
+}
+
+Sdl::Window&
+Sdl::createWindow(const std::string& title, int w, int h, Uint32 flags) {
+    windows.push_back(Sdl::Window { title, SDL_WINDOWPOS_UNDEFINED,
+                                           SDL_WINDOWPOS_UNDEFINED, w, h,
+                                           flags });
+    return windows.back();
+}
+
+Sdl::Window&
+Sdl::createWindow(const std::string& title, int x, int y,
+                                            int w, int h, Uint32 flags) {
+    windows.push_back(Sdl::Window { title, x, y, w, h, flags });
+    return windows.back();
+}
+// Sdl //
+
+// Window //
+Sdl::Window::Window(Window&& other) {
+    window = other.window;
+    other.window = nullptr;
+}
+
+Sdl::Window::Window(const std::string& title, int w, int h)
+    : Window(title, w, h, SDL_WINDOW_SHOWN) {
     
 }
 
-SDLwinaff::SDLwinaff(const std::string& title, int w, int h, Uint32 flags) 
-    : SDLwinaff(title, SDL_WINDOWPOS_UNDEFINED,
+Sdl::Window::Window(const std::string& title, int w, int h, Uint32 flags) 
+    : Window(title, SDL_WINDOWPOS_UNDEFINED,
                         SDL_WINDOWPOS_UNDEFINED, w, h, flags) {
     
 }
 
-SDLwinaff::SDLwinaff(const std::string& title, int x, int y,
+Sdl::Window::Window(const std::string& title, int x, int y,
                                     int w, int h, Uint32 flags)
     : window (SDL_CreateWindow(title.c_str(), x, y, w, h, flags)) {
     if (!window) {
@@ -123,30 +167,32 @@ SDLwinaff::SDLwinaff(const std::string& title, int x, int y,
     }
 }
 
-SDLwinaff::~SDLwinaff() {
-    SDL_DestroyWindow(window);
+Sdl::Window::~Window() {
+    if (window) {
+        SDL_DestroyWindow(window);
+    }
 }
 
-SDL_Surface* SDLwinaff::getSurface() const {
+SDL_Surface* Sdl::Window::getSurface() const {
     return SDL_GetWindowSurface(window);
 }
 
-SDL_PixelFormat* SDLwinaff::getFormat() const {
+SDL_PixelFormat* Sdl::Window::getFormat() const {
     return SDL_GetWindowSurface(window)->format;
 }
 
-SDL_Window* SDLwinaff::getWindow() const {
+SDL_Window* Sdl::Window::getWindow() const {
     return window;
 }
 
-void SDLwinaff::update() const {
+void Sdl::Window::update() const {
     SDL_UpdateWindowSurface(window);
 }
-// SDLwinaff //
+// Window //
 
-// SDLimageflash //
-SDLimageflash::SDLimageflash(const std::string& path_to_image, const SDL_PixelFormat* fmt)
-    : SDLimageflash(path_to_image) {
+// Image //
+Sdl::Image::Image(const std::string& path_to_image, const SDL_PixelFormat* fmt)
+    : Image(path_to_image) {
     auto optimized { SDL_ConvertSurface(image, fmt, 0) };
     if (!optimized) {
         std::cerr << "Unable to optimize image " << path_to_image <<
@@ -157,7 +203,7 @@ SDLimageflash::SDLimageflash(const std::string& path_to_image, const SDL_PixelFo
     image = optimized;
 } 
 
-SDLimageflash::SDLimageflash(const std::string& path_to_image) 
+Sdl::Image::Image(const std::string& path_to_image) 
     : image (IMG_Load(path_to_image.c_str())), name (path_to_image) {
     // : image(SDL_LoadBMP(path_to_image.c_str())) {
     if (!image) {
@@ -167,21 +213,21 @@ SDLimageflash::SDLimageflash(const std::string& path_to_image)
     }
 }
 
-SDLimageflash::~SDLimageflash() {
+Sdl::Image::~Image() {
     SDL_FreeSurface(image);
 }
 
-SDL_Surface* SDLimageflash::getSurface() const {
+SDL_Surface* Sdl::Image::getSurface() const {
     return image;
 }
 
-std::string SDLimageflash::getName() const {
+std::string Sdl::Image::getName() const {
     return name;
 }
-// SDLimageflash //
+// Image //
 
-// SDLrendererninja //
-SDLrendererninja::SDLrendererninja(const SDLwinaff& window, Uint32 flags)
+// Renderer //
+Sdl::Renderer::Renderer(const Window& window, Uint32 flags)
     : renderer (SDL_CreateRenderer(window.getWindow(), -1, flags)) {
     if (!renderer) {
         std::cerr << "Renderer could not be created! SDL_Error: " <<
@@ -190,61 +236,61 @@ SDLrendererninja::SDLrendererninja(const SDLwinaff& window, Uint32 flags)
     }
 }
 
-SDLrendererninja::~SDLrendererninja() {
+Sdl::Renderer::~Renderer() {
     SDL_DestroyRenderer(renderer);
 }
 
-SDL_Renderer* SDLrendererninja::getRenderer() const {
+SDL_Renderer* Sdl::Renderer::getRenderer() const {
     return renderer;
 }
 
-void SDLrendererninja::setDrawColor(Uint8 r, Uint8 g, Uint8 b, Uint8 a) const {
+void Sdl::Renderer::setDrawColor(Uint8 r, Uint8 g, Uint8 b, Uint8 a) const {
     SDL_SetRenderDrawColor(renderer, r, g, b, a);
 }
 
-void SDLrendererninja::drawPoint(int x, int y) const {
+void Sdl::Renderer::drawPoint(int x, int y) const {
     SDL_RenderDrawPoint(renderer, x, y);
 }
 
-void SDLrendererninja::drawLine(int x1, int y1, int x2, int y2) const {
+void Sdl::Renderer::drawLine(int x1, int y1, int x2, int y2) const {
     SDL_RenderDrawLine(renderer, x1, y1, x2, y2);
 }
 
-void SDLrendererninja::drawRect(SDL_Rect rect) const {
+void Sdl::Renderer::drawRect(SDL_Rect rect) const {
     SDL_RenderDrawRect(renderer, &rect);
 }
 
-void SDLrendererninja::fillRect(SDL_Rect rect) const {
+void Sdl::Renderer::fillRect(SDL_Rect rect) const {
     SDL_RenderFillRect(renderer, &rect);
 }
 
-void SDLrendererninja::clear() const {
+void Sdl::Renderer::clear() const {
     SDL_RenderClear(renderer);
 }
 
-void SDLrendererninja::swap() const {
+void Sdl::Renderer::swap() const {
     SDL_RenderPresent(renderer);
 }
 
-void SDLrendererninja::setViewport(SDL_Rect rect) const {
+void Sdl::Renderer::setViewport(SDL_Rect rect) const {
     SDL_RenderSetViewport(renderer, &rect);
 }
 
-void SDLrendererninja::copy(const SDLtextureegg& texture) const {
+void Sdl::Renderer::copy(const Texture& texture) const {
     SDL_RenderCopy(renderer, texture.getTexture(), nullptr, nullptr);
 }
 
-void SDLrendererninja::copy(const SDLtextureegg& texture, SDL_Rect dst) const {
+void Sdl::Renderer::copy(const Texture& texture, SDL_Rect dst) const {
     SDL_RenderCopy(renderer, texture.getTexture(), nullptr , &dst);
 }
 
-void SDLrendererninja::copy(const SDLtextureegg& texture, SDL_Rect src, SDL_Rect dst) const {
+void Sdl::Renderer::copy(const Texture& texture, SDL_Rect src, SDL_Rect dst) const {
     SDL_RenderCopy(renderer, texture.getTexture(), &src, &dst);
 }
-// SDLrendererninja //
+// Renderer //
 
-// SDLtextureegg //
-SDLtextureegg::SDLtextureegg(const SDLrendererninja& renderer, const SDLimageflash& image)
+// Texture //
+Sdl::Texture::Texture(const Renderer& renderer, const Image& image)
     : texture (SDL_CreateTextureFromSurface(renderer.getRenderer(),
                                             image.getSurface())) {
     if (!texture) {
@@ -254,14 +300,14 @@ SDLtextureegg::SDLtextureegg(const SDLrendererninja& renderer, const SDLimagefla
     }
 }
 
-SDLtextureegg::~SDLtextureegg() {
+Sdl::Texture::~Texture() {
     SDL_DestroyTexture(texture);
 }
 
-SDL_Texture* SDLtextureegg::getTexture() const {
+SDL_Texture* Sdl::Texture::getTexture() const {
     return texture;
 }
-// SDLtextureegg //
+// Texture //
 
 // class Ball {
 // public:
@@ -281,7 +327,7 @@ SDL_Texture* SDLtextureegg::getTexture() const {
 //     double vx;
 //     double vy;
 
-//     void render(const SDLrendererninja& renderer, const SDLtextureegg& tex) {
+//     void render(const Renderer& renderer, const Texture& tex) {
 //         renderer.copy(tex, { x - r, y - r, 2 * r, 2 * r });
 //     }
 
@@ -290,6 +336,9 @@ SDL_Texture* SDLtextureegg::getTexture() const {
 //         y += vy;
 //     }
 // };
+
+// TODO: add Viewable interface and RenderMan classes
+// (if possible generate textures for viewables on the fly somehow)
 
 class Ball {
 public:
@@ -301,7 +350,7 @@ public:
     glm::dvec2 vel;
     double r;
 
-    void render(const SDLrendererninja& renderer, const SDLtextureegg& tex) {
+    void render(const Sdl::Renderer& renderer, const Sdl::Texture& tex) {
         renderer.copy(tex, { static_cast<int>(pos.x - r), static_cast<int>(pos.y - r), static_cast<int>(2 * r), static_cast<int>(2 * r) });
     }
 };
@@ -405,19 +454,20 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) {
     std::srand(std::time(nullptr));
     // SDL_Surface* screenSurface { nullptr };
 
-    SDLrename interface { SDL_INIT_VIDEO };
-    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");
-    SDLwinaff window { "SDL tutorial", screen_width, screen_height };
+    Sdl interface { SDL_INIT_VIDEO };
+    interface.setAntiAliasing("1");
+    Sdl::Window& window { interface.createWindow("Collision simulation", screen_width, screen_height) };
 
     // screenSurface = window.getSurface();
-    // SDLimageflash image { "texture.png", window.getFormat() };
-    SDLimageflash image { "texture.png" };
+    // Image image { "texture.png", window.getFormat() };
+    Sdl::Image image { "texture.png" };
 
-    SDLrendererninja renderer { window, SDL_RENDERER_ACCELERATED };
-    SDLtextureegg texture { renderer, image };
+    std::cout << "kk\n";
+    Sdl::Renderer renderer { window, SDL_RENDERER_ACCELERATED | SDL_RENDERER_TARGETTEXTURE };
+    Sdl::Texture texture { renderer, image };
 
-    SDLimageflash circle { "circle.png" };
-    SDLtextureegg tex { renderer, circle };
+    Sdl::Image circle { "circle.png" };
+    Sdl::Texture tex { renderer, circle };
 
     SDL_Event e;
     bool quit { false };
